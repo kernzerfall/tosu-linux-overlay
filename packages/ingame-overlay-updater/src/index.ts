@@ -14,17 +14,57 @@ import {
     spawn
 } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
+import { chmod, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 
 const platform = platformResolver(process.platform);
 
+const isLinux = process.platform === 'linux';
+const overlayExecutable = isLinux
+    ? 'tosu-ingame-overlay'
+    : 'tosu-ingame-overlay.exe';
+
+function isOverlayAsset(name: string) {
+    if (!name.includes('tosu-overlay') || !name.endsWith('.zip')) return false;
+    return isLinux ? name.includes('linux') : !name.includes('linux');
+}
+
+/**
+ * On Linux the overlay is composited by libtosu-overlay.so inside the game, which
+ * must be loaded at game start. Tell the user how to launch osu! with it.
+ */
+function logLinuxLaunchHint(gameOverlayPath: string) {
+    const runner = path.join(gameOverlayPath, 'hook', 'tosu-overlay-run');
+    wLogger.warn(
+        `In-game overlay on Linux needs osu! to be started through: %${runner} <osu! executable>%`
+    );
+    // the logger strips %...% pairs, so the Steam %command% syntax lives in the README
+    wLogger.warn(
+        'For Steam and other launchers see https://github.com/tosuapp/tosu/blob/master/packages/ingame-overlay/README.md#linux'
+    );
+}
+
+// release zips do not keep unix permissions
+const LINUX_EXECUTABLES = [
+    'tosu-ingame-overlay',
+    'chrome_crashpad_handler',
+    'chrome-sandbox',
+    path.join('hook', 'tosu-overlay-run')
+];
+
+async function restoreLinuxPermissions(gameOverlayPath: string) {
+    for (const file of LINUX_EXECUTABLES) {
+        const filePath = path.join(gameOverlayPath, file);
+        if (existsSync(filePath)) await chmod(filePath, 0o755);
+    }
+}
+
 export async function runOverlay(): Promise<ChildProcess | Error> {
     try {
-        if (process.platform !== 'win32') {
+        if (process.platform !== 'win32' && !isLinux) {
             throw new Error(
-                'This feature is currently only available on the Windows platform'
+                'This feature is currently only available on Windows and Linux'
             );
         }
 
@@ -74,13 +114,14 @@ export async function runOverlay(): Promise<ChildProcess | Error> {
                 }[];
             } = json;
 
-            const findAsset = assets.find(
-                (r) =>
-                    r.name.includes('tosu-overlay') && r.name.endsWith('.zip')
-            );
+            const findAsset = assets.find((r) => isOverlayAsset(r.name));
             if (!findAsset) {
+                await rm(gameOverlayPath, { recursive: true, force: true });
                 throw new Error(
-                    `Could not find downloadable files for your operating system. (${platform.type})`
+                    `Could not find downloadable files for your operating system. (${platform.type})` +
+                        (isLinux
+                            ? ` Build it with "pnpm build:overlay:linux" and copy packages/ingame-overlay/pack/linux-unpacked to ${gameOverlayPath}`
+                            : '')
                 );
             }
 
@@ -94,29 +135,30 @@ export async function runOverlay(): Promise<ChildProcess | Error> {
 
             await unzip(archivePath, gameOverlayPath);
             await rm(archivePath);
+            if (isLinux) await restoreLinuxPermissions(gameOverlayPath);
 
             wLogger.info('In-game overlay installed successfully');
         }
 
         wLogger.warn(`Launching in-game overlay...`);
+        if (isLinux) logLinuxLaunchHint(gameOverlayPath);
 
-        const child = spawn(
-            path.join(gameOverlayPath, 'tosu-ingame-overlay.exe'),
-            [],
-            {
-                detached: false,
-                stdio: ['ignore', 'overlapped', 'overlapped', 'ipc'],
-                windowsHide: true,
-                shell: false,
-                env: {
-                    // Force nvidia optimus to prefer dedicated gpu
-                    SHIM_MCCOMPAT: '0x800000001',
-                    // Force ipc fd to 3 just in case
-                    NODE_CHANNEL_FD: '3',
-                    ...process.env
-                }
+        const child = spawn(path.join(gameOverlayPath, overlayExecutable), [], {
+            detached: false,
+            // 'overlapped' is a Windows-only pipe mode
+            stdio: isLinux
+                ? ['ignore', 'pipe', 'pipe', 'ipc']
+                : ['ignore', 'overlapped', 'overlapped', 'ipc'],
+            windowsHide: true,
+            shell: false,
+            env: {
+                // Force nvidia optimus to prefer dedicated gpu
+                SHIM_MCCOMPAT: '0x800000001',
+                // Force ipc fd to 3 just in case
+                NODE_CHANNEL_FD: '3',
+                ...process.env
             }
-        ) as ChildProcessByStdio<null, Readable, Readable>;
+        }) as ChildProcessByStdio<null, Readable, Readable>;
         if (!child.channel) {
             throw new Error(`Could not spawn overlay process with Ipc`);
         }
