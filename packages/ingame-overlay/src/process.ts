@@ -11,13 +11,10 @@ import { BrowserWindow } from 'electron';
 import EventEmitter from 'node:events';
 
 import { Keybind } from './keybind';
+import type { IngameOverlay, OverlayEventEmitter } from './overlay';
 import { preloadPath } from './page';
 
-export type OverlayEventEmitter = EventEmitter<{
-    destroyed: [];
-}>;
-
-export class OverlayProcess {
+export class OverlayProcess implements IngameOverlay {
     readonly event: OverlayEventEmitter = new EventEmitter();
     keybind = new Keybind([]);
 
@@ -159,6 +156,10 @@ export class OverlayProcess {
     private closeConfiguration() {
         this.window.webContents.send('inputCaptureEnd');
         this.window.blurWebView();
+    }
+
+    setKeybind(keys: string[]) {
+        this.keybind = new Keybind(keys);
     }
 
     destroy() {

@@ -1,4 +1,5 @@
 import tosuIcon from '@assets/tosu.ico?no-inline';
+import tosuPngIcon from '@assets/tosu.png?no-inline';
 import { Menu, Tray, app } from 'electron';
 import path from 'node:path';
 
@@ -8,9 +9,14 @@ import { registerTosuProtocol } from './protocol';
 
 // prefer discrete gpu on laptop
 app.commandLine.appendSwitch('force_high_performance_gpu');
-// run in process gpu, reduce overheads
-app.commandLine.appendSwitch('in-process-gpu');
-app.commandLine.appendSwitch('disable-direct-composition');
+if (process.platform === 'win32') {
+    // run in process gpu, reduce overheads
+    app.commandLine.appendSwitch('in-process-gpu');
+    app.commandLine.appendSwitch('disable-direct-composition');
+} else if (process.platform === 'linux') {
+    // offscreen frames are composited 1:1 onto the game framebuffer (in pixels)
+    app.commandLine.appendSwitch('force-device-scale-factor', '1');
+}
 // disable third party storage partitioning, to avoid issues with overlays using isolated storage
 app.commandLine.appendSwitch(
     'disable-features',
@@ -48,7 +54,26 @@ app.commandLine.appendSwitch(
 
     registerTosuProtocol();
 
-    const tray = new Tray(path.join(__dirname, tosuIcon));
+    createTray(manager);
+})().catch((exc) => {
+    console.error(exc);
+    app.exit(0);
+});
+
+// module scope keeps the tray from being garbage collected
+let tray: Tray | undefined;
+
+function createTray(manager: OverlayManager) {
+    try {
+        // Linux tray implementations cannot load .ico files
+        const icon = process.platform === 'win32' ? tosuIcon : tosuPngIcon;
+        tray = new Tray(path.join(__dirname, icon));
+    } catch (exc) {
+        // Linux trays need a StatusNotifier host, which not every desktop has
+        console.debug('Tray unavailable:', exc);
+        return;
+    }
+
     const contextMenu = Menu.buildFromTemplate([
         {
             label: `${packageJSON.name} v${packageJSON.version} by ${packageJSON.author}`,
@@ -73,7 +98,4 @@ app.commandLine.appendSwitch(
     ]);
     tray.setToolTip(packageJSON.name);
     tray.setContextMenu(contextMenu);
-})().catch((exc) => {
-    console.error(exc);
-    app.exit(0);
-});
+}

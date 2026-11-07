@@ -1,11 +1,10 @@
 import { on } from 'node:events';
 
-import { Keybind } from './keybind';
+import { type IngameOverlay, attachOverlay } from './overlay';
 import { loadMainPage } from './page';
-import { OverlayProcess } from './process';
 
 export class OverlayManager {
-    private readonly map: Map<number, OverlayProcess> = new Map();
+    private readonly map: Map<number, IngameOverlay> = new Map();
     private keybindKeys: string[] = ['Control', 'Shift', 'Space'];
 
     private maxFps: number = 60;
@@ -36,9 +35,9 @@ export class OverlayManager {
         try {
             console.log('initializing ingame overlay pid:', pid);
 
-            const overlay = await OverlayProcess.initialize(pid);
+            const overlay = await attachOverlay(pid);
             overlay.window.webContents.setFrameRate(this.maxFps);
-            overlay.keybind = new Keybind(this.keybindKeys);
+            overlay.setKeybind(this.keybindKeys);
             this.map.set(pid, overlay);
             try {
                 await loadMainPage(overlay.window.webContents);
@@ -70,7 +69,7 @@ export class OverlayManager {
     updateKeybind(keybind: string) {
         this.keybindKeys = keybind.split(/\s*\+\s*/);
         for (const overlay of this.map.values()) {
-            overlay.keybind = new Keybind(this.keybindKeys);
+            overlay.setKeybind(this.keybindKeys);
         }
 
         console.debug(`Keybind updated to ${this.keybindKeys.join(' + ')}`);
