@@ -77,6 +77,14 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         run: pnpm build:overlay
 
+      - name: 🛠️ - Install overlay build deps (linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build glslc libvulkan-dev
+
+      - name: 📦 - Build ingame-overlay (linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: pnpm build:overlay:linux
+
       - name: 📦 - Prepare overlay for upload
         if: ${{ matrix.os == 'windows-latest' }}
         shell: bash
@@ -105,6 +113,14 @@ jobs:
         with: {
           name: "tosu-linux-${{ steps.set-pr-sha.outputs.SHORT_PR_SHA || github.ref_name }}",
           path: packages/tosu/dist/tosu
+        }
+
+      - name: 🚀 - Upload overlay artifacts for linux
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: actions/upload-artifact@v7
+        with: {
+          name: "tosu-overlay-linux-${{ steps.set-pr-sha.outputs.SHORT_PR_SHA || github.ref_name }}",
+          path: packages/ingame-overlay/pack/linux-unpacked/*
         }
 
       - name: ✍️ - Creating sign request to SignPath

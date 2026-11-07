@@ -14,6 +14,7 @@
     "build:win": "pnpm run -C packages/tosu compile:win",
     "build:linux": "pnpm run -C packages/tosu compile:linux",
     "build:overlay": "pnpm run -C \"packages/ingame-overlay\" dist",
+    "build:overlay:linux": "pnpm run -C \"packages/ingame-overlay\" dist:linux",
     "release": "commit-and-tag-version",
     "prettier:fix": "prettier --write \"**/*.{js,jsx,ts,tsx,css}\"",
     "prettier:ci": "prettier --check \"**/*.{js,jsx,ts,tsx,css}\"",
