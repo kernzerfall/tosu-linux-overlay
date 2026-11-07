@@ -1,0 +1,7 @@
+{
+    global:
+        dlsym;
+        tosu_vkNegotiateLoaderLayerInterfaceVersion;
+    local:
+        *;
+};

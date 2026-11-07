@@ -1,0 +1,14 @@
+{
+    "file_format_version": "1.2.0",
+    "layer": {
+        "name": "VK_LAYER_TOSU_overlay",
+        "type": "GLOBAL",
+        "library_path": "./libtosu-overlay.so",
+        "api_version": "1.4.363",
+        "implementation_version": "1",
+        "description": "tosu in-game overlay",
+        "functions": {
+            "vkNegotiateLoaderLayerInterfaceVersion": "tosu_vkNegotiateLoaderLayerInterfaceVersion"
+        }
+    }
+}
